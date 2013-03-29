@@ -3,275 +3,176 @@
  * Module dependencies.
  */
 
-var max = require('max-component')
-  , sum = require('sum-component');
+var Emitter = require('events').EventEmitter
+  , debug = require('debug')('mocha-cloud')
+  , Batch = require('batch')
+  , wd = require('wd');
 
 /**
- * Expose `GridView`.
+ * Expose `Cloud`.
  */
 
-exports = module.exports = GridView;
+module.exports = Cloud;
 
 /**
- * Default symbol map.
- */
- 
-exports.symbols = {
-  ok: '✓',
-  error: '✖',
-  none: ' '
-};
-
-/**
- * Default color map.
- */
-
-exports.colors = {
-  ok: 32,
-  error: 31,
-  none: 0
-};
-
-/**
- * Initialize a grid view with the given `cloud` client.
+ * Initialize a cloud test with
+ * project `name`, your saucelabs username / key.
  *
- * @param {Cloud} cloud
- * @param {Context} ctx
+ * @param {String} name
+ * @param {String} user
+ * @param {String} key
  * @api public
  */
 
-function GridView(cloud, ctx) {
-  this.ctx = ctx;
-  this.cloud = cloud;
-  this.browsers = cloud.browsers;
-  this.max = this.maxWidth();
-
-  cloud.on('init', this.oninit.bind(this));
-  cloud.on('start', this.onstart.bind(this));
-  cloud.on('end', this.onend.bind(this));
+function Cloud(name, user, key) {
+  this.name = name;
+  this.user = user;
+  this.key = key;
+  this.browsers = [];
+  this._url = 'http://localhost:3000/';
+  this._tags = [];
 }
 
 /**
- * Compute the max width.
- *
- * @return {Number}
- * @api private
+ * Inherits from `Emitter.prototype`.
  */
 
-GridView.prototype.maxWidth = function(){
-  return max(this.browsers, function(b){
-    return Math.max(b.browserName.length + b.version.length + 1, b.platform.length)
-  });
-};
+Cloud.prototype.__proto__ = Emitter.prototype;
 
 /**
- * Size to `w` / `h`.
+ * Set tags to `tags`.
  *
- * @param {Number} w
- * @param {Number} h
- * @return {GridView} self
+ * @param {Array} tags
+ * @return {Cloud} self
  * @api public
  */
 
-GridView.prototype.size = function(w, h){
-  this.w = w;
-  this.h = h;
+Cloud.prototype.tags = function(tags){
+  this._tags = tags;
   return this;
 };
 
 /**
- * Handle init events.
- */
-
-GridView.prototype.oninit = function(browser){
-  browser.state = 'init';
-  this.draw(this.ctx);
-};
-
-/**
- * Handle start events.
- */
-
-GridView.prototype.onstart = function(browser){
-  browser.state = 'start';
-  this.draw(this.ctx);
-};
-
-/**
- * Handle end events.
- */
-
-GridView.prototype.onend = function(browser, res){
-  browser.state = 'end';
-  browser.results = res;
-  this.draw(this.ctx);
-};
-
-/**
- * Return symbol for `browser` based on its state.
+ * Set test `url`.
  *
- * @param {Object} browser
- * @return {String}
- * @api private
- */
-
-GridView.prototype.symbolFor = function(browser){
-  if (browser.state == 'fail' || (browser.results && browser.results.failures)) return exports.symbols.error;
-  else if ('end' != browser.state) return exports.symbols.none;
-  else return exports.symbols.ok;
-};
-
-/**
- * Return color for `browser` based on its state.
- *
- * @param {Object} browser
- * @return {Number}
- * @api private
- */
-
-GridView.prototype.colorFor = function(browser){
-  if (browser.state == 'fail' || (browser.results && browser.results.failures)) return exports.colors.error;
-  if ('end' != browser.state) return exports.colors.none;
-  return exports.colors.ok;
-};
-
-/**
- * Sum of the total failures.
- *
- * @return {Number}
+ * @param {String} url
  * @api public
  */
 
-GridView.prototype.totalFailures = function(){
-  return sum(this.browsers, 'results.failures');
+Cloud.prototype.url = function(url){
+  this._url = url;
+  return this;
 };
 
 /**
- * Output failures.
+ * Add browser for testing.
  *
+ * View https://saucelabs.com/docs/browsers for details.
+ *
+ * @param {String} name
+ * @param {String} version
+ * @param {String} platform
+ * @return {Cloud} self
  * @api public
  */
 
-GridView.prototype.showFailures = function(){
-  this.browsers.forEach(function(browser){
-    var n = 0;
-    var res = browser.results;
-    if (!res) throw new Error('no results for ' + format(browser));
-    if (!res.failures) return;
-    var failed = res.failed;
-    console.log();
-    console.log('   %s %s', browser.browserName, browser.version);
-    console.log('   \033[90m%s\033[m', browser.platform);
-    failed.forEach(function(test){
-      var err = test.error;
-      var msg = err.message || '';
-      var stack = err.stack || msg;
-      var i = stack.indexOf(msg) + msg.length;
-      msg = stack.slice(0, i);
-      console.log();
-      console.log('    %d) %s', ++n, test.fullTitle);
-      console.log('\033[31m%s\033[m', stack.replace(/^/gm, '       '));
-    });
-    console.log();
+Cloud.prototype.browser = function(name, version, platform){
+  debug('add %s %s %s', name, version, platform);
+  this.browsers.push({
+    browserName: name,
+    version: version,
+    platform: platform
   });
 };
 
-/**
- * Render to `ctx`.
- *
- * @api public
- */
 
-GridView.prototype.draw = function(ctx){
+/**
+ * Given browser {browserName, platform, version}, terminate the connection
+ * to sauceLabs (end test)
+ *
+ * @browser
+ */
+Cloud.prototype.stop_browser = function(){
   var self = this;
-  var max = this.max;
-  var w = this.w;
-  var h = this.h;
-  var x = 4;
-  var y = 3;
 
-  this.browsers.forEach(function(browser){
-    if (x + max > w - 5) { y += 3; x = 4; }
-    var sym = self.symbolFor(browser);
-    var color = self.colorFor(browser);
-    var name = browser.browserName;
-    var version = browser.version;
-    var platform = browser.platform;
-    var label = name + ' ' + version;
+  if (self.connection){
+    self.connection.quit();
 
-    var pad = Array(max - label.length).join(' ');
-    var ppad = Array(max - platform.length + 2).join(' ');
-    ctx.moveTo(x, y);
-    ctx.write(label + pad);
-    ctx.write(' \033[' + color + 'm' + sym + '\033[0m');
-    ctx.moveTo(x, y + 1);
-    ctx.write('\033[90m' + platform + ppad + '\033[0m');
-    x += max + 6;
-  });
-  ctx.write('\n\n');
-};
-
-/**
- * Format browser string.
- */
-
-function format(b) {
-  return b.browserName + ' ' + b.version + ' on ' + b.platform;
+    /**
+    self.connections.forEach(function(conn){
+      if (conn && browser && conn.browserName == browser.browserName &&
+        conn.platform == browser.platform && conn.version == browser.version){
+        conn.quit();
+      }
+    });
+    */
+    
+  }
 }
 
-// browser name to grid browser name
-var browser_map = {
-    "Chrome"            : "chrome"
-  , "Safari"            : "safari"
-  , "Mobile Safari"     : "iphone"
-  , "Opera"             : "opera"
-  , "Internet Explorer" : "internet explorer"
-  , "Firefox"           : "firefox"
-  , "Android"           : "android"
-};
-
-// browser platform name to grid platform name
-var platform_map = {
-    "Windows XP"        : "Windows 2003"
-  , "Windows 7"         : "Windows 2008"
-  , "Windows 8"         : "Windows 2012"
-  , "iOS 5.08"          : "Mac 10.6"
-  , "Mac OS X 10.6.8"   : "Mac 10.6"
-  , "Linux"             : "Linux"
-  , "Linuxux"           : "Linux"
-  , "Linuxx"            : "Linux"
-}; 
-exports.browser_map = browser_map;
-exports.platform_map = platform_map;
-
 /**
- * Mark this browser as having failed
+ * Start cloud tests and invoke `fn(err, results)`.
+ *
+ * Emits:
+ *
+ *   - `init` (browser) testing initiated
+ *   - `start` (browser) testing started
+ *   - `end` (browser, results) test results complete
+ *
+ * @param {Function} fn
+ * @api public
  */
-GridView.prototype.markErrored = function (name, version, platform, cloud) {
 
-  //console.log("looking for " + name + " | " + version + " | " + platform);
+Cloud.prototype.start = function(fn){
+  var self = this;
+  var batch = new Batch;
+  fn = fn || function(){};
 
-  var cloudName = browser_map[name];
-  var cloudPlatform = platform_map[platform];
+  // keeps track of connections
+  var conn = undefined;
 
-  this.browsers.forEach(function (browser) {
-    var name = browser.browserName;
-    var version = browser.version;
+  this.browsers.forEach(function(conf){
+    conf.tags = self.tags;
+    conf.name = self.name;
 
-    //console.log("itr: " + name + " | " + browser.platform + " | " + version);
+    batch.push(function(done){
+      debug('running %s %s %s', conf.browserName, conf.version, conf.platform);
+      var browser = wd.remote('ondemand.saucelabs.com', 80, self.user, self.key);
 
-    if (browser.browserName && cloudName && 
-        browser.browserName.toLowerCase() == cloudName.toLowerCase() && 
-        browser.platform.toLowerCase() == cloudPlatform.toLowerCase()) {
-      browser.state = 'fail';
+      conn = browser; // so that we can prematurely end
 
-      if (cloud) cloud.stop_browser(browser);
+      self.emit('init', conf);
 
-      //console.log("found browser " + name + " | platform - " + cloudPlatform + " | version " + version);
-    }
+      browser.init(conf, function(){
+        debug('open %s', self._url);
+        self.emit('start', conf);
+
+        browser.get(self._url, function(err){
+          if (err) return done(err);
+
+          function wait() {
+            browser.eval('window.mochaResults', function(err, res){
+              if (err) return done(err);
+
+              if (!res) {
+                debug('waiting for results');
+                setTimeout(wait, 1000);
+                return;
+              }
+
+              debug('results %j', res);
+              self.emit('end', conf, res);
+              browser.quit();
+              done(null, res);
+            });
+          }
+
+          wait();
+        });
+      });
+    });
   });
 
-  //console.log(this.ctx);
-  this.draw(this.ctx);
-
+  self.connection = conn;
+  batch.end(fn);
 };
