@@ -45,6 +45,7 @@ function GridView(cloud, ctx) {
   this.cloud = cloud;
   this.browsers = cloud.browsers;
   this.max = this.maxWidth();
+
   cloud.on('init', this.oninit.bind(this));
   cloud.on('start', this.onstart.bind(this));
   cloud.on('end', this.onend.bind(this));
@@ -59,7 +60,7 @@ function GridView(cloud, ctx) {
 
 GridView.prototype.maxWidth = function(){
   return max(this.browsers, function(b){
-    return Math.max(b.browserName.length, b.platform.length)
+    return Math.max(b.browserName.length + b.version.length + 1, b.platform.length)
   });
 };
 
@@ -115,9 +116,9 @@ GridView.prototype.onend = function(browser, res){
  */
 
 GridView.prototype.symbolFor = function(browser){
-  if ('end' != browser.state) return exports.symbols.none;
-  if (browser.state == 'fail' || browser.results.failures) return exports.symbols.error;
-  return exports.symbols.ok;
+  if (browser.state == 'fail' || (browser.results && browser.results.failures)) return exports.symbols.error;
+  else if ('end' != browser.state) return exports.symbols.none;
+  else return exports.symbols.ok;
 };
 
 /**
@@ -129,8 +130,8 @@ GridView.prototype.symbolFor = function(browser){
  */
 
 GridView.prototype.colorFor = function(browser){
+  if (browser.state == 'fail' || (browser.results && browser.results.failures)) return exports.colors.error;
   if ('end' != browser.state) return exports.colors.none;
-  if (browser.state == 'fail' || browser.results.failures) return exports.colors.error;
   return exports.colors.ok;
 };
 
@@ -197,6 +198,7 @@ GridView.prototype.draw = function(ctx){
     var version = browser.version;
     var platform = browser.platform;
     var label = name + ' ' + version;
+
     var pad = Array(max - label.length).join(' ');
     var ppad = Array(max - platform.length + 2).join(' ');
     ctx.moveTo(x, y);
@@ -229,22 +231,37 @@ var platform_map = {
   , "Mac OS X 10.6.8": "Mac 10.6"
 }
 
+exports.browser_map = browser_map;
+exports.platform_map = platform_map;
+
 /**
  * Mark this browser as having failed
  */
-GridView.prototype.markErrored = function (name, version, platform) {
-  var cloudName = browser_map[name.toLowerCase()];
-  var cloudPlatform = platform_map[platform.toLowerCase()];
+GridView.prototype.markErrored = function (name, version, platform, cloud) {
+
+  //console.log("looking for " + name + " | " + version + " | " + platform);
+
+  var cloudName = browser_map[name];
+  var cloudPlatform = platform_map[platform];
 
   this.browsers.forEach(function (browser) {
     var name = browser.browserName;
     var version = browser.version;
 
-    if (browser.browserName == cloudName && browser.platform == cloudPlatform) {
+    //console.log("itr: " + name + " | " + browser.platform + " | " + version);
+
+    if (browser.browserName && cloudName && 
+        browser.browserName.toLowerCase() == cloudName.toLowerCase() && 
+        browser.platform.toLowerCase() == cloudPlatform.toLowerCase()) {
       browser.state = 'fail';
+
+      if (cloud) cloud.stop_browser(browser);
+
+      //console.log("found browser " + name + " | platform - " + cloudPlatform + " | version " + version);
     }
   });
 
+  //console.log(this.ctx);
   this.draw(this.ctx);
 
 };
