@@ -219,18 +219,28 @@ function format(b) {
   return b.browserName + ' ' + b.version + ' on ' + b.platform;
 }
 
+// browser name to grid browser name
 var browser_map = {
-  "Chrome"   : "chrome"
-  , "Safari" : "safari"
-  , "Mobile Safari"   : "iphone"
+    "Chrome"            : "chrome"
+  , "Safari"            : "safari"
+  , "Mobile Safari"     : "iphone"
+  , "Opera"             : "opera"
+  , "Internet Explorer" : "internet explorer"
+  , "Firefox"           : "firefox"
+  , "Android"           : "android"
 };
 
+// browser platform name to grid platform name
 var platform_map = {
-  "Windows 7"   : "Windows 2008"
-  , "iOS 5.08" : "Mac 10.6"
-  , "Mac OS X 10.6.8": "Mac 10.6"
-}
-
+    "Windows XP"        : "Windows 2003"
+  , "Windows 7"         : "Windows 2008"
+  , "Windows 8"         : "Windows 2012"
+  , "iOS 5.08"          : "Mac 10.6"
+  , "Mac OS X 10.6.8"   : "Mac 10.6"
+  , "Linux"             : "Linux"
+  , "Linuxux"           : "Linux"
+  , "Linuxx"            : "Linux"
+}; 
 exports.browser_map = browser_map;
 exports.platform_map = platform_map;
 
@@ -253,11 +263,11 @@ GridView.prototype.markErrored = function (name, version, platform, cloud) {
     if (browser.browserName && cloudName && 
         browser.browserName.toLowerCase() == cloudName.toLowerCase() && 
         browser.platform.toLowerCase() == cloudPlatform.toLowerCase()) {
-      browser.state = 'fail';
+      
+        browser.state = 'fail';
 
-      if (cloud) cloud.stop_browser(browser);
-
-      //console.log("found browser " + name + " | platform - " + cloudPlatform + " | version " + version);
+        //if (cloud) cloud.stop_browser(browser);
+        //console.log("found browser " + name + " | platform - " + cloudPlatform + " | version " + version);
     }
   });
 
